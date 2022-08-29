@@ -1,3 +1,14 @@
+#!/usr/bin/env python3
+
+"""This script reads the PDF provided via command line arguments and generates
+a header file containing the register names and addresses defined as macros.
+"""
+
+__author__ = 'Joshua John'
+__email__ = 'joshuajohnv@protonmail.com'
+__status__ = 'Development'
+__version__ = '0.3'
+
 import argparse
 import camelot
 import os
@@ -6,13 +17,13 @@ import sys
 
 # FUNCTION DEFINITIONS
 def parse_args() -> argparse.Namespace:
-    '''
-    Parse the arguments provided by the user as command line parameters.
+    """Parse the arguments provided by the user as command line parameters.
 
     Returns:
-    Namespace: The namespace containing the command line parameters.
-    '''
-    parser = argparse.ArgumentParser(description='Import the register map from the datasheet PDF.')
+    Namespace -- The namespace containing the command line parameters.
+    """
+    parser = argparse.ArgumentParser(description='Import the register map \
+        from the datasheet PDF.')
 
     parser.add_argument('--pdf',
                         '-p',
@@ -24,35 +35,39 @@ def parse_args() -> argparse.Namespace:
                         '-b',
                         type=int,
                         required=True,
-                        help='The page number that corresponds to the beginning of the register map.'
+                        help='The page number that corresponds to the \
+                            beginning of the register map.'
     )
     parser.add_argument('--end',
                         '-e',
                         type=int,
                         required=True,
-                        help='The page number that corresponds to the end of the register map.'
+                        help='The page number that corresponds to the end of \
+                            the register map.'
     )
     parser.add_argument('--generated_file_name',
                         '-f',
                         type=str,
                         required=False,
-                        help='A custom user defined name for the generated file.'
+                        help='A custom user defined name for the generated \
+                            file.'
     )
     parser.add_argument('--peripheral',
                         '-P',
                         type=str,
-                        required=False,
-                        help='The peripheral the register map belongs to. If no custom file name is provided, this will be used to name the generated header file.'
+                        required=True,
+                        help='The peripheral the register map belongs to. If \
+                            no custom file name is provided, this will be \
+                            used to name the generated header file.'
     )
 
     return parser.parse_args()
 
 def remove_if_exists(path_to_file: str):
-    """
-    Check if the file exists and remove it.
+    """Check if the file exists and remove it.
 
-    Parameters:
-    path_to_file (str): Path to the file.
+    Keyword arguments:
+    path_to_file (str) -- Path to the file.
     """
     if os.path.exists(path_to_file):
         os.remove(path_to_file)
@@ -68,11 +83,11 @@ try:
 except:
     sys.exit("File does not exist.\n")
 
-# Read from the PDF and extract tables. A command line parameter to finetune the line_scale value
-# will be introduced later.
+# Read from the PDF and extract tables. A command line parameter to finetune
+# the line_scale value will be introduced later.
 register_map = camelot.read_pdf(filepath=params.pdf,
                                 flavor="lattice",
-                                pages=(str(params.beg) + "-" + str(params.end)), # Format: beg-end
+                                pages=(str(params.beg) + "-" + str(params.end)),
                                 line_scale=65,
                                 strip_text=' .\n')
 
@@ -87,24 +102,26 @@ for i, table in enumerate(register_map, start=1):
 
 register_map = pd.read_csv(PATH_TO_CSV_TABLE)
 
-print("\n################################### USER NOTICE ###################################\n")
-print("Since there are a lot of variations between data sheets, user must select the")
-print("columns containing the hex addresses and register names to get the most accurate")
-print("results.\n")
-print("The user must input the column number of the hex addresss and register names")
-print("separated by a comma with no whitespaces, with 0 corresponding to the first column.\n")
+print("\n########################## USER NOTICE ##########################\n")
+print("Since there are a lot of variations between data sheets, user must")
+print("select the columns containing the register addresses and names to")
+print("get the most accurate results.\n")
+print("The user must input the column number of the register names and")
+print("addresses.\n")
 print(register_map.columns.values.tolist())
-print("\n###################################################################################\n")
+print("\n#################################################################\n")
 
-columns = input("Please input the hex address and register name columns: ")
+COL_REG_NAME = input("Enter the column number of the register names: ")
+COL_REG_ADDR = input("Enter the column number of the register addresses: ")
 
-
-keep_cols = columns.split(",", 1)
-keep_cols_str = [register_map.columns[int(keep_cols[0])], register_map.columns[int(keep_cols[1])]]
+REG_NAME = register_map.columns[int(COL_REG_NAME)]
+REG_ADDR = register_map.columns[int(COL_REG_ADDR)]
 
 for col in register_map.columns:
-    if col not in keep_cols_str:
+    if col not in [REG_NAME, REG_ADDR]:
         register_map.drop(columns=col, axis=1, inplace=True)
+
+register_map.drop_duplicates(keep=False,inplace=True)
 
 if params.generated_file_name:
     PATH_TO_C_HEADER = params.generated_file_name
@@ -118,9 +135,17 @@ c_header_file = open(PATH_TO_C_HEADER, "w")
 c_header_file.write("#ifndef " + PERIPHERAL +"_H_\n")
 c_header_file.write("#define " + PERIPHERAL +"_H_\n\n")
 
+# Find max length of string in register name column (for formatting purposes)
+REG_NAME_MAX_LEN = register_map.loc[:,REG_NAME].map(len).max() \
+                    + len(PERIPHERAL) \
+                    + 3
+
 # Write the register names and address to the file.
 for index, row in register_map.iterrows():
-    c_header_file.write("#define " + PERIPHERAL + "_" + row[keep_cols_str[1]] + "    " + "0x" + row[keep_cols_str[0]] + "\n")
+    c_header_file.write("#define "
+        + f'{PERIPHERAL + "_" + row[REG_NAME]:<{REG_NAME_MAX_LEN}}'
+        + f'{"0x" + row[REG_ADDR]:>4}'
+        + "\n")
 
 c_header_file.write("\n#endif\n")
 c_header_file.close
