@@ -132,6 +132,7 @@ PDF_PAGE_RANGE: str = str(params.beg) + "-" + str(params.end)
 PERIPHERAL_PREFIX: str = params.peripheral.upper() + "_"
 PATH_TO_HEADER: str = params.gen_file_name if params.gen_file_name \
                         else PERIPHERAL_PREFIX.lower() + "reg.h"
+SCALING_FACTOR = params.scale
 
 # END GLOBAL CONSTANTS
 
