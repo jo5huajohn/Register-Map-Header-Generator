@@ -4,17 +4,19 @@
 a header file containing the register names and addresses defined as macros.
 """
 
-__author__ = 'Joshua John'
-__email__ = 'joshuajohnv@protonmail.com'
-__status__ = 'Development'
-__version__ = '0.4'
+__author__ = "Joshua John"
+__email__ = "joshuajohnv@protonmail.com"
+__license__ = "Apache License 2.0"
+__status__ = "Development"
+__version__ = "0.5"
 
-from re import IGNORECASE
 import argparse
 import camelot
 import os
 import pandas as pd
 import sys
+
+from urllib.request import urlopen
 
 # FUNCTION DEFINITIONS
 def data_frame_cleanup(
@@ -24,7 +26,7 @@ def data_frame_cleanup(
     """Clean up the data frame.
 
     Keyword arguments:
-    register_map (pd.DataFrame): The data frame to be cleaned.
+    register_map (DataFrame): The data frame to be cleaned.
     col_reg_name (str): The column header register name.
     col_reg_addr (str): The column header register address.
 
@@ -40,13 +42,14 @@ def data_frame_cleanup(
     data_frame.drop_duplicates(keep=False,inplace=True)
 
     # Drop rows containing NaN.
-    data_frame.dropna(subset=col_reg_addr, inplace=True)
+    data_frame.dropna(inplace=True)
 
     # Drop rows containing Reserved name.
-    data_frame.drop(index=data_frame[data_frame[col_reg_name].str.contains("Reserved",
-                    flags=IGNORECASE)].index, inplace=True)
-    # Replace tabs with underscores.
+    data_frame.drop(index=data_frame[data_frame[col_reg_name].str.contains(pat="Reserved",
+                                                                           case=False)].index,
+                    inplace=True)
 
+    # Replace tabs with underscores.
     data_frame[col_reg_name].replace("\t", "_", inplace=True, regex=True)
 
     return data_frame
@@ -60,11 +63,11 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description='Import the register map \
         from the datasheet PDF.')
 
-    parser.add_argument("--pdf",
-                        "-p",
+    parser.add_argument("--input",
+                        "-i",
                         type=str,
                         required=True,
-                        help="The datasheet PDF"
+                        help="The path/URL to the datasheet PDF"
     )
     parser.add_argument("--beg",
                         "-b",
@@ -95,6 +98,16 @@ def parse_args() -> argparse.Namespace:
                             no custom file name is provided, this will be \
                             used to name the generated header file."
     )
+    parser.add_argument("--scale",
+                        "-s",
+                        type=int,
+                        required=False,
+                        help="Tweak the line size scaling factor used by the \
+                            script to import the table from the PDF. The \
+                            larger the value the smaller the detected lines. \
+                            The default value is set to 100.",
+                        default=100
+    )
 
     return parser.parse_args()
 
@@ -113,6 +126,7 @@ params = parse_args()
 
 # GLOBAL CONSTANTS
 HEX_PREFIX = "0x"
+SCALING_FACTOR = params.scale
 PATH_TO_CSV_TABLE = "register_map.csv"
 PDF_PAGE_RANGE: str = str(params.beg) + "-" + str(params.end)
 PERIPHERAL_PREFIX: str = params.peripheral.upper() + "_"
@@ -122,16 +136,19 @@ PATH_TO_HEADER: str = params.gen_file_name if params.gen_file_name \
 # END GLOBAL CONSTANTS
 
 try:
-    os.path.exists(params.pdf)
+    os.path.exists(params.input)
 except:
-    sys.exit("File does not exist.\n")
+    try:
+        urlopen(params.input)
+    except:
+        sys.exit("Argument passed is not a valid file or URL.\n")
 
 # Read from the PDF and extract tables. A command line parameter to finetune
 # the line_scale value will be introduced later.
-register_map = camelot.read_pdf(filepath=params.pdf,
+register_map = camelot.read_pdf(filepath=params.input,
                                 flavor="lattice",
                                 pages=(PDF_PAGE_RANGE),
-                                line_scale=65,
+                                line_scale=SCALING_FACTOR,
                                 strip_text=" .-\n")
 
 remove_if_exists(PATH_TO_CSV_TABLE)
@@ -142,12 +159,13 @@ for i, table in enumerate(register_map, start=1):
 
 register_map = pd.read_csv(PATH_TO_CSV_TABLE)
 
+
 print("\n########################## USER NOTICE ##########################\n")
-print("Since there are a lot of variations between data sheets, user")
+print("Since there are a lot of variations between data sheets, the user")
 print("must select the columns containing the register addresses and")
 print("names to get the most accurate results.\n")
-print("The user must input the column number of the register names and")
-print("addresses.\n")
+print("The user must then input the column number of the register names and")
+print("addresses, with 0 corresponding to the first column.\n")
 print(register_map.columns.values.tolist())
 print("\n#################################################################\n")
 
